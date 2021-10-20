@@ -579,6 +579,7 @@ exports.stringAssembler = () => ({
    * @param {string} x -
    */
   append(x) { this._str += String(x); },
+  clear() { this._str = ''; },
   toString() { return this._str; },
 });
 
