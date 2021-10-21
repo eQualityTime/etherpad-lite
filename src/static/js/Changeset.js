@@ -344,7 +344,7 @@ class OpAssembler {
  * @yields {Op} The squashed operations.
  * @returns {Generator<Op>}
  */
-const squashOps = function* (ops, finalize) {
+exports.squashOps = function* (ops, finalize) {
   let prevOp = new Op();
   // If we get, for example, insertions [xxx\n,yyy], those don't merge, but if we get
   // [xxx\n,yyy,zzz\n], that merges to [xxx\nyyyzzz\n]. This variable stores the length of yyy and
@@ -403,7 +403,7 @@ class MergingOpAssembler {
   }
 
   _serialize(finalize) {
-    this._serialized = exports.serializeOps(squashOps(this._ops, finalize));
+    this._serialized = exports.serializeOps(exports.squashOps(this._ops, finalize));
   }
 
   clear() {
@@ -446,14 +446,14 @@ const canonicalizeOps = function* (ops, finalize) {
   let lengthChange = 0;
 
   const flushPlusMinus = function* () {
-    yield* squashOps(minusOps, false);
+    yield* exports.squashOps(minusOps, false);
     minusOps = [];
-    yield* squashOps(plusOps, false);
+    yield* exports.squashOps(plusOps, false);
     plusOps = [];
   };
 
   const flushKeeps = function* (finalize) {
-    yield* squashOps(keepOps, finalize);
+    yield* exports.squashOps(keepOps, finalize);
     keepOps = [];
   };
 
@@ -635,9 +635,14 @@ exports.checkRep = (cs) => {
 exports.smartOpAssembler = () => new SmartOpAssembler();
 
 /**
+ * @deprecated Use `squashOps` with `serializeOps` instead.
  * @returns {MergingOpAssembler}
  */
-exports.mergingOpAssembler = () => new MergingOpAssembler();
+exports.mergingOpAssembler = () => {
+  padutils.warnWithStack(
+      'Changeset.mergingOpAssembler() is deprecated; use Changeset.squashOps() instead');
+  return new MergingOpAssembler();
+};
 
 /**
  * @deprecated Use `serializeOps` instead.
@@ -1377,12 +1382,12 @@ exports.mutateAttributionLines = (cs, lines, pool) => {
   let lineAssem = null;
 
   const outputMutOp = (op) => {
-    if (!lineAssem) lineAssem = new MergingOpAssembler();
-    lineAssem.append(op);
+    if (!lineAssem) lineAssem = [];
+    lineAssem.push(op);
     if (op.lines <= 0) return;
     assert(op.lines === 1, `Can't have op.lines of ${op.lines} in attribution lines`);
     // ship it to the mut
-    mut.insert(lineAssem.toString(), 1);
+    mut.insert(exports.serializeOps(exports.squashOps(lineAssem, false)), 1);
     lineAssem = null;
   };
 
@@ -1431,23 +1436,22 @@ exports.mutateAttributionLines = (cs, lines, pool) => {
  * @returns {string} joined Attribution lines
  */
 exports.joinAttributionLines = (theAlines) => {
-  const assem = new MergingOpAssembler();
-  for (const aline of theAlines) {
-    for (const op of exports.deserializeOps(aline)) assem.append(op);
-  }
-  return assem.toString();
+  const ops = (function* () {
+    for (const aline of theAlines) yield* exports.deserializeOps(aline);
+  })();
+  return exports.serializeOps(exports.squashOps(ops, false));
 };
 
 exports.splitAttributionLines = (attrOps, text) => {
-  const assem = new MergingOpAssembler();
+  let ops = [];
   const lines = [];
   let pos = 0;
 
   const appendOp = (op) => {
-    assem.append(op);
+    ops.push(op);
     if (op.lines > 0) {
-      lines.push(assem.toString());
-      assem.clear();
+      lines.push(exports.serializeOps(exports.squashOps(ops, false)));
+      ops = [];
     }
     pos += op.chars;
   };
