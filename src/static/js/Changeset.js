@@ -888,11 +888,17 @@ const textLinesMutator = (lines) => {
         curSplice.push(...newLines);
         curLine += newLines.length;
       }
-    } else {
+    } else if (!hasMore()) {
       // There are no additional lines. Although the line is put into splice, curLine is not
-      // increased because there may be more chars in the line (newline is not reached).
+      // increased because there may be more chars in the line (newline is not reached). We are
+      // inserting at the end of lines. curCol is 0 as curLine is not in splice.
+      curSplice.push(text);
+      curCol += text.length;
+    } else {
+      // insert text after curCol
       const sline = putCurLineInSplice();
       if (!curSplice[sline]) {
+        // TODO should never happen now
         const err = new Error(
             'curSplice[sline] not populated, actual curSplice contents is ' +
             `${JSON.stringify(curSplice)}. Possibly related to ` +
